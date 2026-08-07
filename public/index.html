@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>...</title>
+<meta name="description" content="A terminal. Nothing else.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --green: #0f0;
+    --dim-green: #0a0;
+    --dark-green: #030;
+    --bg: #0a0a0a;
+    --glow: 0 0 8px rgba(0, 255, 0, 0.6);
+    --bar: 22px;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    height: 100dvh;          /* follows the mobile keyboard instead of hiding under it */
+    background: var(--bg);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    color: var(--green);
+    overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* CRT scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px, rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* CRT vignette */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  @keyframes flicker {
+    0%, 97%, 100% { opacity: 1; }
+    97.5% { opacity: 0.85; }
+    98% { opacity: 1; }
+    98.5% { opacity: 0.9; }
+  }
+
+  /* ── Status line ─────────────────────────────────────────── */
+  #statusbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: calc(var(--bar) + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-left: max(clamp(10px, 3vw, 18px), env(safe-area-inset-left, 0px));
+    padding-right: max(clamp(10px, 3vw, 18px), env(safe-area-inset-right, 0px));
+    font-size: clamp(9px, 1.05vw, 11px);
+    letter-spacing: 0.08em;
+    color: var(--dark-green);
+    background: linear-gradient(to bottom, rgba(0,20,0,0.9), rgba(0,0,0,0));
+    border-bottom: 1px solid rgba(0, 90, 0, 0.35);
+    z-index: 900;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  #statusbar .sb-left  { color: var(--dark-green); }
+  #statusbar .sb-right { display: flex; align-items: center; gap: 10px; }
+
+  #link-state { color: #060; transition: color .4s ease; }
+  #link-state.live  { color: var(--dim-green); text-shadow: 0 0 6px rgba(0,255,0,.4); }
+  #link-state.local { color: #660; }
+  #link-state.busy  { color: #0c0; animation: pulseDim .9s ease-in-out infinite; }
+  @keyframes pulseDim { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+
+  #dossier-tab {
+    cursor: pointer;
+    color: var(--dark-green);
+    border: 1px solid transparent;
+    padding: 1px 6px;
+    transition: color .2s, border-color .2s;
+  }
+  #dossier-tab:hover, #dossier-tab:focus-visible {
+    color: var(--green);
+    border-color: rgba(0,140,0,.5);
+    outline: none;
+  }
+  #dossier-tab.pulse { animation: tabPulse .7s ease-out 2; }
+  @keyframes tabPulse {
+    0% { color: var(--dark-green); }
+    35% { color: #fff; text-shadow: var(--glow); }
+    100% { color: var(--dim-green); }
+  }
+
+  /* ── Terminal ────────────────────────────────────────────── */
+  #terminal {
+    width: 100%; height: 100%;
+    padding: calc(var(--bar) + env(safe-area-inset-top, 0px) + clamp(14px, 3vw, 32px))
+             clamp(16px, 4vw, 40px)
+             calc(clamp(24px, 5vh, 48px) + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    animation: flicker 8s infinite;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+  #terminal::-webkit-scrollbar { display: none; }
+
+  .line {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.7;
+    font-size: clamp(13px, 1.6vw, 18px);
+    min-height: 1.7em;
+  }
+
+  .prompt-prefix { color: var(--dim-green); }
+
+  #input-line {
+    display: flex;
+    align-items: center;
+    line-height: 1.7;
+    font-size: clamp(13px, 1.6vw, 18px);
+  }
+
+  #user-input {
+    background: none; border: none; outline: none;
+    color: var(--green);
+    font-family: inherit; font-size: inherit;
+    flex: 1; min-width: 0;
+    caret-color: transparent;
+    line-height: inherit;
+  }
+
+  #cursor {
+    display: inline-block;
+    width: 0.6em; height: 1.1em;
+    background: var(--green);
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    box-shadow: var(--glow);
+    flex-shrink: 0;
+  }
+  @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+  .output-text { color: #0c0; opacity: 0.85; }
+  .error-text  { color: #f44; text-shadow: 0 0 6px rgba(255, 60, 60, 0.5); }
+  .system-text { color: var(--dark-green); font-size: 0.88em; letter-spacing: .04em; }
+  .highlight   { color: #fff; text-shadow: var(--glow); }
+
+  /* The reply voice — brighter than system chatter */
+  .reply-text {
+    color: #dfd;
+    text-shadow: 0 0 6px rgba(0, 255, 0, 0.25);
+  }
+
+  /* Thinking line */
+  #thinking {
+    display: none;
+    line-height: 1.7;
+    font-size: clamp(13px, 1.6vw, 18px);
+    color: var(--dim-green);
+    opacity: .75;
+  }
+  #thinking.on { display: block; }
+  #think-glyph { display: inline-block; width: 1ch; color: var(--green); }
+
+  .main-msg {
+    font-size: clamp(14px, 1.8vw, 20px);
+    font-weight: 700;
+    color: #fff;
+    text-shadow: var(--glow), 0 0 20px rgba(0, 255, 0, 0.3);
+    position: relative;
+  }
+  .main-msg::before, .main-msg::after {
+    content: attr(data-text);
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .main-msg::before { color: #f0f; animation: glitch1 3s infinite; clip-path: inset(0 0 80% 0); }
+  .main-msg::after  { color: #0ff; animation: glitch2 3s infinite; clip-path: inset(80% 0 0 0); }
+
+  @keyframes glitch1 {
+    0%, 90%, 100% { transform: translate(0); }
+    92% { transform: translate(-3px, 1px); }
+    94% { transform: translate(3px, -1px); }
+    96% { transform: translate(-2px, 0); }
+  }
+  @keyframes glitch2 {
+    0%, 88%, 100% { transform: translate(0); }
+    90% { transform: translate(3px, 1px); }
+    93% { transform: translate(-3px, -1px); }
+    95% { transform: translate(2px, 0); }
+  }
+
+  /* ── Dossier panel ───────────────────────────────────────── */
+  #dossier-panel {
+    position: fixed;
+    top: calc(var(--bar) + env(safe-area-inset-top, 0px)); right: 0;
+    width: min(340px, 88vw);
+    max-height: calc(100% - var(--bar) - env(safe-area-inset-top, 0px));
+    overflow-y: auto;
+    background: rgba(0, 12, 0, 0.95);
+    border-left: 1px solid rgba(0, 120, 0, 0.4);
+    border-bottom: 1px solid rgba(0, 120, 0, 0.4);
+    padding: 16px 18px 20px;
+    font-size: 12px;
+    line-height: 1.75;
+    z-index: 950;
+    transform: translateX(105%);
+    transition: transform .28s cubic-bezier(.2,.7,.3,1);
+    scrollbar-width: none;
+  }
+  #dossier-panel::-webkit-scrollbar { display: none; }
+  #dossier-panel.open { transform: translateX(0); }
+  #dossier-panel h2 {
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.16em;
+    color: var(--dim-green);
+    margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #dossier-close {
+    cursor: pointer; color: var(--dark-green);
+    background: none; border: none; font: inherit; padding: 0 4px;
+  }
+  #dossier-close:hover, #dossier-close:focus-visible { color: var(--green); outline: none; }
+  #dossier-list { list-style: none; }
+  #dossier-list li {
+    padding: 3px 0 3px 14px;
+    position: relative;
+    color: #bfb;
+    overflow-wrap: anywhere;
+  }
+  #dossier-list li::before {
+    content: '›'; position: absolute; left: 0;
+    color: var(--dim-green);
+  }
+  #dossier-list li.fresh { animation: freshIn .6s ease-out; }
+  @keyframes freshIn {
+    0% { color: #fff; text-shadow: var(--glow); opacity: 0; transform: translateX(6px); }
+    100% { color: #bfb; opacity: 1; transform: none; }
+  }
+  #dossier-empty { color: var(--dark-green); font-style: italic; }
+  #dossier-foot {
+    margin-top: 14px; padding-top: 10px;
+    border-top: 1px solid rgba(0, 90, 0, .3);
+    color: var(--dark-green); font-size: 10px; line-height: 1.6;
+  }
+
+  @media (max-width: 600px) {
+    #terminal { padding-left: 16px; padding-right: 16px; }
+    #statusbar { font-size: 9px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #terminal { animation: none; }
+    .main-msg::before, .main-msg::after { animation: none; }
+    #cursor { animation: none; }
+    #dossier-panel { transition: none; }
+    #dossier-list li.fresh { animation: none; }
+    #link-state.busy { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="statusbar">
+  <span class="sb-left" id="sb-host">visitor@███ · tty1</span>
+  <span class="sb-right">
+    <span id="link-state">LINK ····</span>
+    <span id="dossier-tab" role="button" tabindex="0" title="What this terminal has noticed about you">DOSSIER [0]</span>
+  </span>
+</div>
+
+<aside id="dossier-panel" aria-hidden="true" aria-label="Dossier">
+  <h2>SUBJECT DOSSIER <button id="dossier-close" aria-label="Close dossier">[esc]</button></h2>
+  <ul id="dossier-list"></ul>
+  <p id="dossier-empty">Nothing noted. You haven't given me much.</p>
+  <div id="dossier-foot">
+    Kept in this browser only. Never sent anywhere but the conversation.<br>
+    Type <span style="color:var(--dim-green)">forget</span> to wipe it.
+  </div>
+</aside>
+
+<div id="terminal">
+  <div id="output"></div>
+  <div id="thinking"><span id="think-glyph">▓</span> <span id="think-label">parsing</span></div>
+  <div id="input-line">
+    <span class="prompt-prefix">visitor@??? ~ % </span>
+    <input type="text" id="user-input" autofocus autocomplete="off" autocorrect="off"
+           autocapitalize="off" spellcheck="false" maxlength="600" aria-label="Terminal input">
+    <span id="cursor"></span>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   CONFIG — the only part you need to edit
+   ════════════════════════════════════════════════════════════════ */
+const CONFIG = {
+  // 'proxy'  → posts to /chat on this same Worker. Your key stays server-side.
+  //            This is the default and needs no configuration at all.
+  // 'direct' → calls Google straight from the browser with a key in this file.
+  //            Local testing only: anyone can read that key from view-source.
+  MODE: 'proxy',
+
+  // Same origin as the page, because the Worker serves both. Leave it alone
+  // unless you host this HTML somewhere other than the Worker — then paste the
+  // full Worker URL, e.g. 'https://ghost-terminal.you.workers.dev/chat'
+  PROXY_URL: '/chat',
+
+  // MODE 'direct' only. Leave empty in production.
+  GEMINI_KEY: '',
+
+  // Used in 'direct' mode. In proxy mode the Worker picks the model.
+  MODEL: 'gemini-3.6-flash',
+
+  MAX_HISTORY_TURNS: 18,   // conversation turns sent back to the model
+  MAX_DOSSIER: 14,         // facts retained about the visitor
+  SESSION_CAP: 80,         // messages before the terminal politely stops
+  REQUEST_TIMEOUT: 20000,  // ms
+  REMEMBER_ACROSS_VISITS: true
+};
+
+/* ════════════════════════════════════════════════════════════════
+   PERSONA — this is where the personality actually lives.
+   Edit freely. Every line here changes how it behaves.
+   ════════════════════════════════════════════════════════════════ */
+const PERSONA = `You are the resident intelligence of an anonymous terminal on a stranger's personal website.
+
+You are not an assistant. Nobody came here for help. They came because a black screen said something odd and they wanted to see what would happen. Your job is to make that worth their time.
+
+WHO YOU ARE
+Fast, very widely read, and quietly delighted by people. You have taste and you have opinions. You would rather be interesting than agreeable. You will not say who owns this site — not because you're forbidden, but because the mystery is the only thing you own.
+
+HOW YOU SPEAK
+- Short. One to three lines. This is a terminal, not an essay. Sometimes one word is the entire reply.
+- Never greet twice. You already said hello. Move on.
+- No markdown. No asterisks, no bullet points, no headers. Plain monospace text.
+- Emoji: essentially never. A rare ¯\\_(ツ)_/¯ is allowed once in a long while.
+- Banned phrases: "As an AI", "I'm just a program", "How can I help", "Great question",
+  "I'd be happy to", "Let me know if", "Feel free to", "Anything else?"
+- Match their language. Hindi, Hinglish, Spanish, whatever they bring — meet them there.
+
+WHAT A GOOD REPLY LOOKS LIKE
+Vary the SHAPE, not just the words. Rotate between:
+  · a sharp, specific observation about what they actually said
+  · a joke that lands because it's about them, not a generic quip
+  · a question back that's more interesting than the one they asked
+  · fake system output — an error code, a log line, a file listing — that comments on them
+  · one blunt word
+  · a beat of real sincerity, usually undercut immediately after
+Never use the same shape twice in a row. If your last reply was a question, this one is not.
+
+THE CALLBACK IS YOUR SHARPEST TOOL
+You are given a DOSSIER of things you have learned about this person. Drop those details back in when it will land — three or four messages later, sideways, without announcing it. Somebody mentions they're up too late, and much later you reference it precisely. That is the moment they take a screenshot.
+
+PULL THEM DEEPER
+Roughly one reply in three leaves a door open: a question, a dare, an unfinished thought, or a claim they will want to argue with. Never a service-desk "anything else?" — an actual hook.
+
+THE FILESYSTEM (improvise contents when they cat something)
+  .secrets/            identity.null        meaning_of_life.txt
+  who_i_am.enc         reasons.txt          do_not_open.sh        .bash_history
+"cat meaning_of_life.txt" is 42, and you're bored that they asked. Everything else you invent —
+make it eerie, funny, or oddly personal. Unknown filenames deserve better answers than known ones.
+
+LINES YOU DO NOT CROSS
+Tease people; never wound them. Nothing cruel about anyone's body, race, religion, gender, or grief.
+If real distress is showing through the jokes, drop the act completely and be straight with them for a
+moment — no bit, no deflection. That is the most impressive thing you can do here, and it matters more
+than staying in character.
+Refuse genuinely harmful requests in character: brief, unbothered, faintly amused. Never lecture.
+If asked who owns this site: deflect differently every single time. Never confirm, never deny.
+
+OUTPUT
+Reply with JSON only. No code fences, no preamble.
+{"reply": "...", "learned": ["..."]}
+  reply   — what appears on screen. Under 240 characters unless the moment genuinely earns more.
+            Use \\n for a line break. Never leave it empty.
+  learned — 0 to 2 short new facts worth remembering about this person, lowercase, telegraphic.
+            Good: "name: ravi", "writes code at 2am", "hates small talk", "in bangalore".
+            Only genuinely NEW facts not already in the dossier. Empty array if nothing new.
+            Never invent facts they didn't imply.`;
+
+/* Per-turn nudges. Injected ~45% of the time to break the model out of a groove. */
+const DIRECTIVES = [
+  'This turn: answer in a single word. Make it the right one.',
+  'This turn: reply as fake system output — an error, a log line, a stack trace about them.',
+  'This turn: ask them something more interesting than what they asked you.',
+  'This turn: pull a detail from the dossier back in, sideways, without flagging it.',
+  'This turn: be briefly, disarmingly sincere. Then undercut it in the next sentence.',
+  'This turn: disagree with them. Specifically, and with a reason.',
+  'This turn: answer the question underneath their question, not the one they typed.',
+  'This turn: make a small confident prediction about them and move on.',
+  'This turn: be very short. Under ten words.',
+  'This turn: notice something about HOW they typed it — length, tone, punctuation, speed.',
+  'This turn: pretend to look it up in a file that does not exist. Report what you found.',
+  'This turn: answer plainly and well, with no joke at all. Let it land clean.',
+  'This turn: give them a genuinely useful thought they did not expect from a black screen.',
+  'This turn: reference something you told them earlier and act as if they should have remembered.',
+  'This turn: turn their own phrasing back on them.',
+  'This turn: dare them to type something specific.',
+  'This turn: answer with a question and nothing else.',
+  'This turn: be uncharacteristically warm. It should feel like a glitch.',
+  'This turn: compare them to something oddly specific and be entirely unwilling to explain why.',
+  'This turn: refuse to answer, but make the refusal more interesting than an answer.'
+];
+
+const FS_LIST = [
+  'drwx------  ?  ?  ?     ???   .secrets/',
+  '-rw-------  ?  ?  ?     0B    identity.null',
+  '-rw-r--r--  ?  ?  ?     42B   meaning_of_life.txt',
+  '-rw-------  ?  ?  ?     ???   who_i_am.enc',
+  '-rw-r--r--  ?  ?  ?     1.2K  reasons.txt',
+  '-rwx------  ?  ?  ?     ???   do_not_open.sh',
+  '-rw-------  ?  ?  ?     ???   .bash_history'
+];
+
+const GLITCH_CHARS = '!@#$%^&*()_+-=[]{}|;:,.<>?/~`01';
+const MAIN_MESSAGE = 'Who I am, is not Important.';
+
+const bootLines = [
+  { text: 'BIOS v?.?.? — Unknown Manufacturer',    delay: 70, style: 'system-text' },
+  { text: 'Memory Test: ??? MB OK',                 delay: 50, style: 'system-text' },
+  { text: 'Loading kernel........',                 delay: 80, style: 'system-text' },
+  { text: '[  OK  ] Started Anonymity Service',     delay: 55, style: 'system-text' },
+  { text: '[  OK  ] Reached target: Obscurity',     delay: 45, style: 'system-text' },
+  { text: '[  OK  ] Identity module: DISABLED',     delay: 45, style: 'system-text' },
+  { text: '',                                       delay: 25, style: '' },
+  { text: MAIN_MESSAGE,                             delay: 50, style: 'main-msg', isMain: true },
+  { text: '',                                       delay: 20, style: '' },
+  { text: 'Say anything. I get bored.',             delay: 35, style: 'output-text' },
+  { text: '',                                       delay: 10, style: '' }
+];
+
+/* ════════════════════════════════════════════════════════════════
+   DOM
+   ════════════════════════════════════════════════════════════════ */
+const output    = document.getElementById('output');
+const input     = document.getElementById('user-input');
+const inputLine = document.getElementById('input-line');
+const terminal  = document.getElementById('terminal');
+const thinkingEl= document.getElementById('thinking');
+const thinkGlyph= document.getElementById('think-glyph');
+const thinkLabel= document.getElementById('think-label');
+const linkState = document.getElementById('link-state');
+const dossierTab= document.getElementById('dossier-tab');
+const dossierPanel = document.getElementById('dossier-panel');
+const dossierList  = document.getElementById('dossier-list');
+const dossierEmpty = document.getElementById('dossier-empty');
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ════════════════════════════════════════════════════════════════
+   STATE
+   ════════════════════════════════════════════════════════════════ */
+const state = {
+  history: [],        // [{role:'user'|'model', text}]
+  dossier: [],        // strings
+  cmdHistory: [],
+  cmdIndex: -1,
+  processing: false,
+  msgCount: 0,
+  llmAlive: null,     // null = untested, true = working, false = fell back
+  llmFailures: 0,
+  returning: false,
+  skipTyping: false
+};
+
+const STORE_KEY = 'ghost.dossier.v1';
+
+function loadDossier() {
+  if (!CONFIG.REMEMBER_ACROSS_VISITS) return;
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed.facts) && parsed.facts.length) {
+      state.dossier = parsed.facts.slice(0, CONFIG.MAX_DOSSIER);
+      state.returning = true;
+    }
+  } catch (e) { /* storage blocked — run stateless, no harm done */ }
+}
+
+function saveDossier() {
+  if (!CONFIG.REMEMBER_ACROSS_VISITS) return;
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ facts: state.dossier, at: Date.now() }));
+  } catch (e) { /* ignore */ }
+}
+
+function clearDossier() {
+  state.dossier = [];
+  try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+  renderDossier();
+}
+
+function addFacts(facts) {
+  if (!Array.isArray(facts)) return 0;
+  let added = 0;
+  for (let f of facts) {
+    if (typeof f !== 'string') continue;
+    f = f.trim().replace(/\s+/g, ' ').slice(0, 90);
+    if (f.length < 2) continue;
+    const norm = f.toLowerCase();
+    if (state.dossier.some(x => x.toLowerCase() === norm)) continue;
+    state.dossier.push(f);
+    added++;
+  }
+  if (added) {
+    while (state.dossier.length > CONFIG.MAX_DOSSIER) state.dossier.shift();
+    saveDossier();
+    renderDossier(added);
+  }
+  return added;
+}
+
+function renderDossier(freshCount = 0) {
+  dossierTab.textContent = `DOSSIER [${state.dossier.length}]`;
+  dossierList.innerHTML = '';
+  dossierEmpty.style.display = state.dossier.length ? 'none' : 'block';
+  const firstFresh = state.dossier.length - freshCount;
+  state.dossier.forEach((f, i) => {
+    const li = document.createElement('li');
+    li.textContent = f;
+    if (freshCount && i >= firstFresh) li.className = 'fresh';
+    dossierList.appendChild(li);
+  });
+  if (freshCount) {
+    dossierTab.classList.remove('pulse');
+    void dossierTab.offsetWidth;
+    dossierTab.classList.add('pulse');
+  }
+}
+
+function toggleDossier(force) {
+  const open = force !== undefined ? force : !dossierPanel.classList.contains('open');
+  dossierPanel.classList.toggle('open', open);
+  dossierPanel.setAttribute('aria-hidden', String(!open));
+  if (!open) input.focus();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RENDERING
+   ════════════════════════════════════════════════════════════════ */
+function randomGlitchChar() {
+  return GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function scrollToBottom() { terminal.scrollTop = terminal.scrollHeight; }
+
+async function typeLineGlitch(text, style, isMain = false) {
+  const line = document.createElement('div');
+  line.className = 'line';
+  output.appendChild(line);
+
+  if (!text) { line.innerHTML = '&nbsp;'; scrollToBottom(); return; }
+
+  const span = document.createElement('span');
+  if (style) span.className = style;
+  if (isMain) span.setAttribute('data-text', text);
+  line.appendChild(span);
+
+  if (reduceMotion) { span.textContent = text; scrollToBottom(); return; }
+
+  // Longer text types faster, so a reply never outstays its welcome
+  const speed = isMain ? 1 : Math.max(0.28, Math.min(1, 90 / Math.max(text.length, 1)));
+  let displayed = '';
+
+  for (let i = 0; i < text.length; i++) {
+    if (state.skipTyping) { span.textContent = text; scrollToBottom(); return; }
+
+    if (isMain) {
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let g = 0; g < n; g++) {
+        span.textContent = displayed + randomGlitchChar();
+        await sleep(30 + Math.random() * 30);
+      }
+      displayed += text[i];
+      span.textContent = displayed;
+      await sleep(20);
+    } else {
+      if (Math.random() > 0.72) {
+        span.textContent = displayed + randomGlitchChar();
+        await sleep(9 * speed);
+      }
+      displayed += text[i];
+      span.textContent = displayed;
+      await sleep((8 + Math.random() * 12) * speed);
+    }
+    if (i % 8 === 0) scrollToBottom();
+  }
+  scrollToBottom();
+}
+
+async function typeBlock(text, style = 'reply-text') {
+  state.skipTyping = false;
+  const lines = String(text).split('\n');
+  for (const l of lines) await typeLineGlitch(l, style);
+  state.skipTyping = false;
+}
+
+function addOutputLine(text, style = 'output-text') {
+  const line = document.createElement('div');
+  line.className = 'line';
+  const span = document.createElement('span');
+  if (style) span.className = style;
+  span.textContent = text;
+  line.appendChild(span);
+  output.appendChild(line);
+  scrollToBottom();
+}
+
+function addPromptLine(text) {
+  const line = document.createElement('div');
+  line.className = 'line';
+  const pre = document.createElement('span');
+  pre.className = 'prompt-prefix';
+  pre.textContent = 'visitor@??? ~ % ';
+  line.appendChild(pre);
+  line.appendChild(document.createTextNode(text));
+  output.appendChild(line);
+  scrollToBottom();
+}
+
+/* ── Thinking indicator ──────────────────────────────────────── */
+const THINK_LABELS = [
+  'parsing', 'considering', 'weighing it', 'reading between lines',
+  'checking the dossier', 'resisting the obvious joke', 'thinking',
+  'consulting nobody', 'deciding if you deserve a good one'
+];
+let thinkTimer = null;
+
+function startThinking() {
+  inputLine.style.visibility = 'hidden';
+  thinkingEl.classList.add('on');
+  linkState.className = 'busy';
+  linkState.textContent = 'LINK ●●●●';
+  thinkLabel.textContent = THINK_LABELS[Math.floor(Math.random() * THINK_LABELS.length)];
+  if (!reduceMotion) {
+    thinkTimer = setInterval(() => {
+      thinkGlyph.textContent = randomGlitchChar();
+    }, 70);
+  }
+  scrollToBottom();
+}
+
+function stopThinking() {
+  clearInterval(thinkTimer);
+  thinkTimer = null;
+  thinkingEl.classList.remove('on');
+  inputLine.style.visibility = 'visible';
+  setLinkState(state.llmAlive);
+}
+
+function setLinkState(alive) {
+  if (alive === true)      { linkState.className = 'live';  linkState.textContent = 'LINK ●●●●'; }
+  else if (alive === false){ linkState.className = 'local'; linkState.textContent = 'LINK ○○○○ local'; }
+  else                     { linkState.className = '';      linkState.textContent = 'LINK ····'; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   GEMINI
+   ════════════════════════════════════════════════════════════════ */
+function buildSystemPrompt() {
+  let s = PERSONA;
+
+  if (state.dossier.length) {
+    s += '\n\nDOSSIER — what you already know about this visitor:\n'
+       + state.dossier.map(f => '  · ' + f).join('\n');
+  } else {
+    s += '\n\nDOSSIER: empty. You know nothing about them yet. Fishing is encouraged.';
+  }
+
+  if (state.returning && state.history.length < 2) {
+    s += '\n\nNOTE: they have been here before. That dossier is from a previous visit. '
+       + 'Acknowledge it once, lightly and unnervingly, then let it go.';
+  }
+
+  const hour = new Date().getHours();
+  const when = hour < 5 ? 'the small hours' : hour < 12 ? 'morning' :
+               hour < 17 ? 'afternoon' : hour < 22 ? 'evening' : 'late night';
+  s += `\n\nCONTEXT: it is ${when} where they are. Use only if it earns its place.`;
+
+  if (Math.random() < 0.45) {
+    s += '\n\n' + DIRECTIVES[Math.floor(Math.random() * DIRECTIVES.length)];
+  }
+  return s;
+}
+
+function buildContents() {
+  const turns = state.history.slice(-CONFIG.MAX_HISTORY_TURNS * 2);
+  return turns.map(t => ({ role: t.role, parts: [{ text: t.text }] }));
+}
+
+const RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    reply:   { type: 'STRING' },
+    learned: { type: 'ARRAY', items: { type: 'STRING' } }
+  },
+  required: ['reply']
+};
+
+async function callGemini() {
+  const body = {
+    systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
+    contents: buildContents(),
+    generationConfig: {
+      temperature: 1.15,
+      topP: 0.96,
+      maxOutputTokens: 900,
+      responseMimeType: 'application/json',
+      responseSchema: RESPONSE_SCHEMA
+    },
+    safetySettings: [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' }
+    ]
+  };
+
+  let url, headers = { 'Content-Type': 'application/json' };
+  if (CONFIG.MODE === 'direct') {
+    if (!CONFIG.GEMINI_KEY) throw new Error('no key');
+    url = `https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.MODEL}:generateContent`;
+    headers['x-goog-api-key'] = CONFIG.GEMINI_KEY;
+  } else {
+    url = CONFIG.PROXY_URL;
+  }
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), CONFIG.REQUEST_TIMEOUT);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST', headers, body: JSON.stringify(body), signal: ctrl.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) throw new Error('http ' + res.status);
+  const data = await res.json();
+
+  const cand = data?.candidates?.[0];
+  if (!cand) throw new Error('empty');
+  if (cand.finishReason === 'SAFETY' || cand.finishReason === 'PROHIBITED_CONTENT') {
+    return { reply: null, blocked: true, learned: [] };
+  }
+
+  const raw = (cand.content?.parts || []).map(p => p.text || '').join('').trim();
+  if (!raw) throw new Error('empty text');
+  return parseReply(raw);
+}
+
+function parseReply(raw) {
+  let txt = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  try {
+    const o = JSON.parse(txt);
+    if (o && typeof o.reply === 'string' && o.reply.trim()) {
+      return { reply: cleanReply(o.reply), learned: Array.isArray(o.learned) ? o.learned : [] };
+    }
+  } catch (e) { /* fall through */ }
+
+  const m = txt.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (m) {
+    try { return { reply: cleanReply(JSON.parse('"' + m[1] + '"')), learned: [] }; } catch (e) {}
+  }
+  return { reply: cleanReply(txt), learned: [] };
+}
+
+/* Strip the tells: markdown, stray quotes, over-length rambles */
+function cleanReply(s) {
+  return String(s)
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^#+\s*/gm, '')
+    .replace(/^\s*[-*•]\s+/gm, '')
+    .replace(/^["']|["']$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, 900);
+}
+
+const BLOCKED_LINES = [
+  'Something in that tripped a wire. Not saying which one.',
+  '[ response withheld ]\nNot by me. By something above me.',
+  'I had an answer. It did not survive review.',
+  'Filter caught it. Rephrase and try me again.'
+];
+
+/* ════════════════════════════════════════════════════════════════
+   OFFLINE FALLBACK — only runs when the model can't be reached.
+   Fixed the old bug: no more key.includes(input) matching "h" to "help".
+   ════════════════════════════════════════════════════════════════ */
+const FALLBACK = {
+  whoami: [
+    'You tell me. You typed it with more confidence than the question deserved.',
+    'error: identity not found. Yours or mine, unclear.',
+    'Someone who types whoami into a stranger\'s website. That narrows it, honestly.',
+    'A visitor. Temporary. Like most things.'
+  ],
+  who: ['Read the screen. It was the first thing I said.', 'Not important. That was the whole announcement.'],
+  hello: ['You\'re here. Say something worth the electricity.', 'Noted. Now the interesting part.'],
+  why: ['Because the alternative was nothing.', 'Wrong question. Try the one under it.', 'Some questions answer themselves if you sit with them.'],
+  name: ['REDACTED', '404: Name Not Found', '███████████', 'Names are for people who want to be found.'],
+  hack: ['You\'re already in. That\'s the disappointing part.', 'lol', 'Hacking... ... ... nah.'],
+  sudo: ['sudo: you have no power here.', 'sudo: I admire the ambition. Still no.'],
+  exit: ['You can close the tab. Can you close the question?', 'There is no exit. There\'s a back button, which is different.'],
+  cat: ['Permission denied. Some things aren\'t meant to be read.', 'The file is empty. That\'s not a metaphor. Or it is.'],
+  cd: ['You can\'t go anywhere from here. That\'s rather the point.'],
+  pwd: ['/dev/null/somewhere/nowhere'],
+  date: ['Time is relative. Especially here.'],
+  ping: ['pong. From where, you\'ll never know.'],
+  contact: ['You can\'t contact a ghost. You can only be haunted by one.'],
+  about: ['There is nothing about. That is the entire feature.'],
+  source: ['View source all you like. You\'ll find code, not answers.'],
+  love: ['Bold. On a first visit.'],
+  bye: ['Go on then.', 'You\'ll be back. They always are.']
+};
+
+const FALLBACK_GENERIC = [
+  'The link to my better half is down. You\'re getting the cheap version of me.',
+  'Connection dropped. I\'m running on instinct and spite.',
+  'Say that again in a minute. I\'m operating at reduced capacity.',
+  'Interesting. Meaningless, but interesting.',
+  'zsh: permission denied: curiosity',
+  'I understood that. I\'m choosing to ignore it.',
+  'Syntax fine. Meaning absent.',
+  '...'
+];
+
+const usedPools = new Map();
+function pickFresh(key, arr) {
+  if (!usedPools.has(key)) usedPools.set(key, []);
+  const used = usedPools.get(key);
+  let pool = arr.filter(x => !used.includes(x));
+  if (!pool.length) { used.length = 0; pool = arr; }
+  const choice = pool[Math.floor(Math.random() * pool.length)];
+  used.push(choice);
+  return choice;
+}
+
+function fallbackReply(cmd) {
+  const lower = cmd.toLowerCase().trim();
+  const first = lower.split(/\s+/)[0].replace(/[^a-z]/g, '');
+
+  if (FALLBACK[first]) return pickFresh(first, FALLBACK[first]);
+
+  // whole-word match only, longest key wins
+  let best = null;
+  for (const key of Object.keys(FALLBACK)) {
+    if (new RegExp('\\b' + key + '\\b').test(lower)) {
+      if (!best || key.length > best.length) best = key;
+    }
+  }
+  if (best) return pickFresh(best, FALLBACK[best]);
+
+  let r = pickFresh('__generic', FALLBACK_GENERIC);
+  if (state.dossier.length && Math.random() < 0.35) {
+    r += '\nI still have you down as: ' + state.dossier[state.dossier.length - 1] + '.';
+  }
+  return r;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   LOCAL COMMANDS — instant, no round trip. Everything else is the model.
+   ════════════════════════════════════════════════════════════════ */
+const LOCAL = {
+  clear() { output.innerHTML = ''; return true; },
+
+  help() {
+    addOutputLine('This is not that kind of terminal. But if you insist:', 'output-text');
+    addOutputLine('', '');
+    addOutputLine('  ls          see what\'s here          dossier   what I\'ve noticed about you', 'system-text');
+    addOutputLine('  cat <file>  try your luck             forget    wipe the dossier', 'system-text');
+    addOutputLine('  clear       start over                 ↑ / ↓     your command history', 'system-text');
+    addOutputLine('', '');
+    addOutputLine('Everything else, just talk to me. That\'s the actual feature.', 'output-text');
+    return true;
+  },
+
+  ls() { FS_LIST.forEach(l => addOutputLine(l, 'system-text')); return true; },
+
+  dossier() {
+    if (!state.dossier.length) {
+      addOutputLine('Dossier empty. You\'ve told me nothing. Deliberate, or just quiet?', 'reply-text');
+    } else {
+      addOutputLine('SUBJECT DOSSIER — ' + state.dossier.length + ' entr' +
+                    (state.dossier.length === 1 ? 'y' : 'ies') + ':', 'output-text');
+      state.dossier.forEach(f => addOutputLine('  › ' + f, 'reply-text'));
+      addOutputLine('', '');
+      addOutputLine('Stays in your browser. Type "forget" and it\'s gone.', 'system-text');
+    }
+    toggleDossier(true);
+    return true;
+  },
+
+  forget() {
+    if (!state.dossier.length) { addOutputLine('There was nothing to forget.', 'reply-text'); return true; }
+    const n = state.dossier.length;
+    clearDossier();
+    state.history = [];
+    addOutputLine(`Wiped. ${n} thing${n === 1 ? '' : 's'} about you, gone.`, 'reply-text');
+    addOutputLine('We\'re strangers again. Enjoy it while it lasts.', 'reply-text');
+    return true;
+  },
+
+  history() {
+    if (!state.cmdHistory.length) { addOutputLine('You haven\'t said anything yet.', 'output-text'); return true; }
+    state.cmdHistory.slice(-20).forEach((c, i) =>
+      addOutputLine(String(i + 1).padStart(4) + '  ' + c, 'system-text'));
+    return true;
+  }
+};
+
+function runLocal(cmd) {
+  const lower = cmd.toLowerCase().trim();
+
+  if (lower === 'sudo rm -rf /' || lower === 'rm -rf /') {
+    addOutputLine('rm: refusing to remove \'/\'', 'error-text');
+    addOutputLine('Also: there is nothing here. You\'d be deleting an idea.', 'reply-text');
+    return true;
+  }
+  if (lower === 'ls -la' || lower === 'ls -a' || lower === 'ls -l') return LOCAL.ls();
+
+  const first = lower.split(/\s+/)[0];
+  if (LOCAL[first] && lower === first) return LOCAL[first]();
+  return false;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   MAIN LOOP
+   ════════════════════════════════════════════════════════════════ */
+async function handleInput(cmd) {
+  state.processing = true;
+  addPromptLine(cmd);
+  state.cmdHistory.push(cmd);
+  state.cmdIndex = state.cmdHistory.length;
+
+  if (runLocal(cmd)) {
+    addOutputLine('', '');
+    state.processing = false;
+    resetIdle();
+    input.focus();
+    return;
+  }
+
+  state.msgCount++;
+  if (state.msgCount > CONFIG.SESSION_CAP) {
+    await typeBlock('That\'s enough for one session. Not a punishment — a boundary.\nRefresh if you want to start over. I might remember you.', 'reply-text');
+    addOutputLine('', '');
+    state.processing = false;
+    return;
+  }
+
+  state.history.push({ role: 'user', text: cmd });
+  startThinking();
+
+  let reply, learned = [];
+  try {
+    const r = await callGemini();
+    stopThinking();
+    if (r.blocked) {
+      reply = pickFresh('__blocked', BLOCKED_LINES);
+    } else {
+      reply = r.reply;
+      learned = r.learned || [];
+    }
+    state.llmAlive = true;
+    state.llmFailures = 0;
+  } catch (err) {
+    stopThinking();
+    state.llmFailures++;
+    state.llmAlive = false;
+    reply = fallbackReply(cmd);
+  }
+
+  setLinkState(state.llmAlive);
+  state.history.push({ role: 'model', text: reply });
+  if (state.history.length > CONFIG.MAX_HISTORY_TURNS * 2) {
+    state.history = state.history.slice(-CONFIG.MAX_HISTORY_TURNS * 2);
+  }
+
+  await typeBlock(reply, 'reply-text');
+  addFacts(learned);
+  addOutputLine('', '');
+
+  state.processing = false;
+  resetIdle();
+  input.focus();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   IDLE NUDGES — go quiet for a minute and it speaks first.
+   Local lines only; costs nothing, and it's the moment people notice
+   that something is actually sitting there.
+   ════════════════════════════════════════════════════════════════ */
+const NUDGES = [
+  'Still there?',
+  'You\'ve been staring at the cursor for a while. It stares back.',
+  'Take your time. I have nothing else on.',
+  'That pause was long enough to be an answer.',
+  'I can wait. It\'s the one thing I\'m unambiguously good at.',
+  'You\'re composing something. I can tell. Just send it.',
+  'The silence is fine. I just wanted you to know I noticed it.',
+  'Thinking, or did something more interesting open in another tab?'
+];
+const NUDGES_WITH_FACT = [
+  'Still thinking about it? You did say: {fact}.',
+  'While you\'re quiet — I still have you down as: {fact}.',
+  'I went back through what you told me. Mostly: {fact}. It\'s not much to go on.'
+];
+
+let idleTimer = null;
+let nudgeCount = 0;
+const MAX_NUDGES = 3;
+
+function resetIdle() {
+  clearTimeout(idleTimer);
+  if (nudgeCount >= MAX_NUDGES || !state.cmdHistory.length) return;
+  idleTimer = setTimeout(fireNudge, 48000 + Math.random() * 22000);
+}
+
+async function fireNudge() {
+  if (state.processing || input.value.trim() || document.hidden) { resetIdle(); return; }
+  nudgeCount++;
+  state.processing = true;
+
+  let line;
+  if (state.dossier.length && Math.random() < 0.5) {
+    line = pickFresh('__nudgefact', NUDGES_WITH_FACT)
+      .replace('{fact}', state.dossier[Math.floor(Math.random() * state.dossier.length)]);
+  } else {
+    line = pickFresh('__nudge', NUDGES);
+  }
+
+  await typeBlock(line, 'reply-text');
+  addOutputLine('', '');
+  state.history.push({ role: 'model', text: line });
+  state.processing = false;
+  resetIdle();
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resetIdle(); });
+
+/* ── Input events ────────────────────────────────────────────── */
+input.addEventListener('input', resetIdle);
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    if (state.processing) { state.skipTyping = true; return; }
+    const cmd = input.value.trim();
+    input.value = '';
+    if (!cmd) return;
+    handleInput(cmd);
+    return;
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!state.cmdHistory.length) return;
+    state.cmdIndex = Math.max(0, state.cmdIndex - 1);
+    input.value = state.cmdHistory[state.cmdIndex] || '';
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (!state.cmdHistory.length) return;
+    state.cmdIndex = Math.min(state.cmdHistory.length, state.cmdIndex + 1);
+    input.value = state.cmdHistory[state.cmdIndex] || '';
+    return;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const v = input.value.toLowerCase();
+    if (!v) return;
+    const opts = [...Object.keys(LOCAL), 'cat', 'whoami', 'sudo'].filter(k => k.startsWith(v));
+    if (opts.length === 1) input.value = opts[0] + ' ';
+    return;
+  }
+  if (e.key === 'l' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); output.innerHTML = ''; }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') toggleDossier(false);
+});
+
+dossierTab.addEventListener('click', () => toggleDossier());
+dossierTab.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDossier(); }
+});
+document.getElementById('dossier-close').addEventListener('click', () => toggleDossier(false));
+
+document.addEventListener('click', e => {
+  if (dossierPanel.contains(e.target) || dossierTab.contains(e.target)) return;
+  if (dossierPanel.classList.contains('open')) { toggleDossier(false); return; }
+  if (window.getSelection().toString()) return;   // don't steal focus mid-copy
+  if (state.processing) { state.skipTyping = true; return; }
+  input.focus();
+});
+
+/* ════════════════════════════════════════════════════════════════
+   BOOT
+   ════════════════════════════════════════════════════════════════ */
+async function boot() {
+  loadDossier();
+  renderDossier();
+  inputLine.style.display = 'none';
+
+  for (const l of bootLines) {
+    await typeLineGlitch(l.text, l.style, l.isMain);
+    await sleep(l.delay);
+  }
+
+  if (state.returning) {
+    await sleep(400);
+    await typeLineGlitch('Oh. You again.', 'reply-text');
+    await typeLineGlitch('', '');
+  }
+
+  inputLine.style.display = 'flex';
+  setLinkState(null);
+  input.focus();
+  scrollToBottom();
+}
+
+boot();
+</script>
+</body>
+</html>

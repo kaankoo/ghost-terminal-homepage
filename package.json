@@ -1,0 +1,17 @@
+{
+  "name": "ghost-terminal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "An anonymous CRT terminal that talks back, powered by Gemini",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.119.0"
+  },
+  "dependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

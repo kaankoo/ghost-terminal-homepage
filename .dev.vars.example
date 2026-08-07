@@ -1,0 +1,3 @@
+# Copy to .dev.vars for local development: cp .dev.vars.example .dev.vars
+# .dev.vars is gitignored. Never commit a real key.
+GEMINI_API_KEY=paste-your-key-here

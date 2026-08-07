@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  // Becomes your URL: https://ghost-terminal.<your-subdomain>.workers.dev
+  // Rename it and the URL changes with it.
+  "name": "ghost-terminal",
+
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-01",
+
+  // index.html is served straight from the edge as a static file.
+  // Requests that match no file — /chat — fall through to the Worker.
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "none"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+
+  // GEMINI_API_KEY is deliberately absent. It is a secret, not a variable.
+  // Set it in the dashboard under Settings → Variables and Secrets,
+  // or from the terminal with: npx wrangler secret put GEMINI_API_KEY
+}
