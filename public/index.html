@@ -449,6 +449,7 @@ const linkState = document.getElementById('link-state');
 const dossierTab= document.getElementById('dossier-tab');
 const dossierPanel = document.getElementById('dossier-panel');
 const dossierList  = document.getElementById('dossier-list');
+const dossierEmpty = document.getElementById('dossier-empty');
 const inputBefore = document.getElementById('input-before');
 const inputAfter = document.getElementById('input-after');
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -520,14 +521,14 @@ function addFacts(facts) {
 
 function renderDossier(freshCount = 0) {
   if (dossierTab) dossierTab.textContent = `DOSSIER [${state.dossier.length}]`;
-  dossierList.innerHTML = '';
-  dossierEmpty.style.display = state.dossier.length ? 'none' : 'block';
+  if (dossierList) dossierList.innerHTML = '';
+  if (dossierEmpty) dossierEmpty.style.display = state.dossier.length ? 'none' : 'block';
   const firstFresh = state.dossier.length - freshCount;
   state.dossier.forEach((f, i) => {
     const li = document.createElement('li');
     li.textContent = f;
     if (freshCount && i >= firstFresh) li.className = 'fresh';
-    dossierList.appendChild(li);
+    if (dossierList) dossierList.appendChild(li);
   });
   if (freshCount && dossierTab) {
     dossierTab.classList.remove('pulse');
@@ -1115,7 +1116,9 @@ if (dossierTab) {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDossier(); }
   });
 }
-document.getElementById('dossier-close').addEventListener('click', () => toggleDossier(false));
+if (document.getElementById('dossier-close')) {
+  document.getElementById('dossier-close').addEventListener('click', () => toggleDossier(false));
+}
 
 document.addEventListener('click', e => {
   if (dossierPanel.contains(e.target) || (dossierTab && dossierTab.contains(e.target))) return;
