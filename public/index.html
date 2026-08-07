@@ -15,7 +15,7 @@
   :root {
     --green: #0f0;
     --dim-green: #0a0;
-    --dark-green: #030;
+    --dark-green: #078007;   /* dim, but still readable against #0a0a0a */
     --bg: #0a0a0a;
     --glow: 0 0 8px rgba(0, 255, 0, 0.6);
     --bar: 22px;
@@ -45,12 +45,12 @@
     z-index: 1000;
   }
 
-  /* CRT vignette */
+  /* CRT vignette — kept shallow so text near the edges stays readable */
   body::after {
     content: '';
     position: fixed;
     inset: 0;
-    background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+    background: radial-gradient(ellipse at center, transparent 72%, rgba(0,0,0,0.45) 100%);
     pointer-events: none;
     z-index: 999;
   }
@@ -77,12 +77,21 @@
     font-size: clamp(9px, 1.05vw, 11px);
     letter-spacing: 0.08em;
     color: var(--dark-green);
-    background: linear-gradient(to bottom, rgba(0,20,0,0.9), rgba(0,0,0,0));
-    border-bottom: 1px solid rgba(0, 90, 0, 0.35);
     z-index: 900;
     user-select: none;
     white-space: nowrap;
-    overflow: hidden;
+    overflow: visible;
+    background: var(--bg);
+    border-bottom: 1px solid rgba(0, 110, 0, 0.35);
+  }
+  /* Short scrim so a line scrolling out of view fades rather than clipping */
+  #statusbar::after {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 100%;
+    height: 18px;
+    background: linear-gradient(to bottom, var(--bg), rgba(10, 10, 10, 0));
+    pointer-events: none;
   }
   #statusbar .sb-left  { color: var(--dark-green); }
   #statusbar .sb-right { display: flex; align-items: center; gap: 10px; }
@@ -166,7 +175,7 @@
 
   .output-text { color: #0c0; opacity: 0.85; }
   .error-text  { color: #f44; text-shadow: 0 0 6px rgba(255, 60, 60, 0.5); }
-  .system-text { color: var(--dark-green); font-size: 0.88em; letter-spacing: .04em; }
+  .system-text { color: #0b0; opacity: 0.72; font-size: 0.9em; letter-spacing: .04em; }
   .highlight   { color: #fff; text-shadow: var(--glow); }
 
   /* The reply voice — brighter than system chatter */
@@ -729,7 +738,7 @@ async function callGemini() {
     systemInstruction: { parts: [{ text: buildSystemPrompt() }] },
     contents: buildContents(),
     generationConfig: {
-      temperature: 1.15,
+      temperature: 1.25,
       topP: 0.96,
       maxOutputTokens: 900,
       responseMimeType: 'application/json',
