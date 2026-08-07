@@ -584,7 +584,7 @@ async function typeLineGlitch(text, style, isMain = false) {
   let displayed = '';
 
   for (let i = 0; i < text.length; i++) {
-    if (state.skipTyping) { span.textContent = text; scrollToBottom(); return; }
+    if (!isBooting && state.skipTyping) { span.textContent = text; scrollToBottom(); return; }
 
     if (isMain) {
       const n = 2 + Math.floor(Math.random() * 3);
@@ -1118,9 +1118,10 @@ if (dossierTab) {
 document.getElementById('dossier-close').addEventListener('click', () => toggleDossier(false));
 
 document.addEventListener('click', e => {
-  if (dossierPanel.contains(e.target) || dossierTab.contains(e.target)) return;
+  if (dossierPanel.contains(e.target) || (dossierTab && dossierTab.contains(e.target))) return;
   if (dossierPanel.classList.contains('open')) { toggleDossier(false); return; }
   if (window.getSelection().toString()) return;   // don't steal focus mid-copy
+  if (isBooting) { input.focus(); return; }
   if (state.processing) { state.skipTyping = true; return; }
   input.focus();
 });
@@ -1130,12 +1131,14 @@ document.addEventListener('click', e => {
    ════════════════════════════════════════════════════════════════ */
 async function boot() {
   isBooting = true;
+  state.skipTyping = false;
   terminal.scrollTop = 0;
   loadDossier();
   renderDossier();
   inputLine.style.display = 'none';
 
   for (const l of bootLines) {
+    state.skipTyping = false;
     await typeLineGlitch(l.text, l.style, l.isMain);
     await sleep(l.delay);
   }
